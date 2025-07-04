@@ -95,12 +95,12 @@ def generate_filter_pass_csv(failure_csv, filter_json):
 
         safe_write_csv(df, failure_csv)
 
-def safe_read_csv(filepath, retries=10, delay=3):
+def safe_read_csv(filepath, retries=20, delay=3, **kwargs):
     for attempt in range(1, retries + 1):
         try:
             with open(filepath, "r") as f:
                 fcntl.flock(f, fcntl.LOCK_SH)  # shared lock for reading
-                df = pd.read_csv(f)
+                df = pd.read_csv(f, **kwargs)
                 fcntl.flock(f, fcntl.LOCK_UN)
             print(f"✅ Read {filepath} on attempt {attempt}")
             return df
