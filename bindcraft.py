@@ -174,7 +174,7 @@ while True:
 
                 ### MPNN redesign of starting binder
                 mpnn_trajectories = mpnn_gen_sequence(trajectory_pdb, binder_chain, trajectory_interface_residues, advanced_settings)
-                existing_mpnn_sequences = set(pd.read_csv(mpnn_csv, usecols=['Sequence'])['Sequence'].values)
+                existing_mpnn_sequences = set(safe_read_csv(mpnn_csv, usecols=['Sequence'])['Sequence'].values)
 
                 # create set of MPNN sequences with allowed amino acid composition
                 restricted_AAs = set(aa.strip().upper() for aa in advanced_settings["omit_AAs"].split(',')) if advanced_settings["force_reject_AA"] else set()
@@ -404,7 +404,7 @@ while True:
 
                         else:
                             print(f"Unmet filter conditions for {mpnn_design_name}")
-                            failure_df = pd.read_csv(failure_csv)
+                            failure_df = safe_read_csv(failure_csv)
                             special_prefixes = ('Average_', '1_', '2_', '3_', '4_', '5_')
                             incremented_columns = set()
 
@@ -418,7 +418,7 @@ while True:
                                     failure_df[base_column] = failure_df[base_column] + 1
                                     incremented_columns.add(base_column)
 
-                            failure_df.to_csv(failure_csv, index=False)
+                            safe_write_csv(failure_df, failure_csv)
                             shutil.copy(best_model_pdb, design_paths["Rejected"])
                         
                         # increase MPNN design number

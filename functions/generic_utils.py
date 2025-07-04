@@ -11,6 +11,8 @@ import random
 import math
 import pandas as pd
 import numpy as np
+import fcntl
+import time
 
 # Define labels for dataframes
 def generate_dataframe_labels():
@@ -91,11 +93,34 @@ def generate_filter_pass_csv(failure_csv, filter_json):
         df = pd.DataFrame(columns=names)
         df.loc[0] = [0] * len(names)
 
-        df.to_csv(failure_csv, index=False)
+        safe_write_csv(df, failure_csv)
+
+def safe_read_csv(filepath, retries=10, delay=3):
+    for attempt in range(1, retries + 1):
+        try:
+            with open(filepath, "r") as f:
+                fcntl.flock(f, fcntl.LOCK_SH)  # shared lock for reading
+                df = pd.read_csv(f)
+                fcntl.flock(f, fcntl.LOCK_UN)
+            print(f"✅ Read {filepath} on attempt {attempt}")
+            return df
+        except pd.errors.EmptyDataError:
+            print(f"⚠️ EmptyDataError on attempt {attempt}, retrying after {delay}s...")
+            time.sleep(delay)
+        except Exception as e:
+            print(f"❌ Unexpected error reading {filepath} on attempt {attempt}: {e}")
+            time.sleep(delay)
+    raise RuntimeError(f"Failed to read {filepath} after {retries} attempts")
+
+def safe_write_csv(df, filepath):
+    with open(filepath, "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)  # exclusive lock for writing
+        df.to_csv(f, index=False)
+        fcntl.flock(f, fcntl.LOCK_UN)
 
 # update failure rates from trajectories and early predictions
 def update_failures(failure_csv, failure_column_or_dict):
-    failure_df = pd.read_csv(failure_csv)
+    failure_df = safe_read_csv(failure_csv)
     
     def strip_model_prefix(name):
         # Strips the model-specific prefix if it exists
@@ -121,7 +146,7 @@ def update_failures(failure_csv, failure_column_or_dict):
         else:
             failure_df[failure_column] = 1
     
-    failure_df.to_csv(failure_csv, index=False)
+    safe_write_csv(failure_df, failure_csv)
 
 # Check if number of trajectories generated
 def check_n_trajectories(design_paths, advanced_settings):
@@ -145,7 +170,7 @@ def check_accepted_designs(design_paths, mpnn_csv, final_labels, final_csv, adva
             os.remove(os.path.join(design_paths["Accepted/Ranked"], f))
 
         # load dataframe of designed binders
-        design_df = pd.read_csv(mpnn_csv)
+        design_df = safe_read_csv(mpnn_csv)
         design_df = design_df.sort_values('Average_i_pTM', ascending=False)
         
         # create final csv dataframe to copy matched rows, initialize with the column labels
@@ -168,7 +193,7 @@ def check_accepted_designs(design_paths, mpnn_csv, final_labels, final_csv, adva
                     break
 
         # save the final_df to final_csv
-        final_df.to_csv(final_csv, index=False)
+        safe_write_csv(final_df, final_csv)
 
         # zip large folders to save space
         if advanced_settings["zip_animations"]:
@@ -285,13 +310,15 @@ def load_af2_models(af_multimer_setting):
 def create_dataframe(csv_file, columns):
     if not os.path.exists(csv_file):
         df = pd.DataFrame(columns=columns)
-        df.to_csv(csv_file, index=False)
+        safe_write_csv(df, csv_file)
 
 # insert row of statistics into csv
 def insert_data(csv_file, data_array):
     df = pd.DataFrame([data_array])
-    df.to_csv(csv_file, mode='a', header=False, index=False)
-
+    with open(csv_file, "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)  # Exclusive lock for appending
+        df.to_csv(f, header=False, index=False)
+        fcntl.flock(f, fcntl.LOCK_UN)
 # save generated sequence
 def save_fasta(design_name, sequence, design_paths):
     fasta_path = os.path.join(design_paths["MPNN/Sequences"], design_name+".fasta")
