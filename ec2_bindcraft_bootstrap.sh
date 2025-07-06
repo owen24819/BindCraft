@@ -57,4 +57,5 @@ echo "All BindCraft jobs launched!"
 wait
 echo "All BindCraft jobs finished!"
 
-
+echo "🔌 Shutting down instance..."
+sudo shutdown -h now
